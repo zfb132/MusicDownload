@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">MusicDownload</string>
+    <string name="main_songname">歌曲名字：</string>
+    <string name="main_name_demo">示例: 惊鸿一面</string>
+    <string name="main_btn_next">跳转页面</string>
+    <string name="main_btn_search">搜索歌曲</string>
+</resources>
