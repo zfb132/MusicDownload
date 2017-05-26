@@ -1,6 +1,9 @@
 package com.whuzfb.musicdownload;
 
 import android.app.Activity;
+import android.app.Notification;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
@@ -17,6 +20,7 @@ import android.os.Message;
 import android.support.annotation.Nullable;
 import android.telephony.TelephonyManager;
 import android.util.Log;
+import android.view.Gravity;
 import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
@@ -69,6 +73,9 @@ public class MainActivity extends Activity{
     public Button btn_search=null;
     public EditText et_keyword=null;
     public TextView tv_show=null;
+
+    public Context context=null;
+    public NotificationManager notificationManager=null;
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -106,19 +113,28 @@ public class MainActivity extends Activity{
         btn_search.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
+                //判断是否联网
                 if(netConnect()){
+                    //判断关键词是否为空
                     if(et_keyword.getText().toString().equals("")){
-                        Toast.makeText(MainActivity.this,"请先输入歌曲名字",Toast.LENGTH_SHORT).show();
+                        showToast("请先输入歌曲名字",Toast.LENGTH_SHORT);
                     }else {
                         tv_show.setText("");
                         new Thread(networkTask).start();
                         textToClipBoard(cliptext);
+                        showNote(1,"url已保存，点击打开");
+                        //showToast("文件保存到/sdcard/MusicDownload/url.txt",Toast.LENGTH_LONG);
                     }
                 }else{
-                    Toast.makeText(MainActivity.this,"请先连接网络后再使用",Toast.LENGTH_SHORT).show();
+                    showToast("请先连接网络后再使用",Toast.LENGTH_SHORT);
                 }
             }
         });
+
+        context=getApplicationContext();
+        String ns=Context.NOTIFICATION_SERVICE;
+        notificationManager=(NotificationManager)getSystemService(ns);
+
     }
 
     Handler handler = new Handler() {
@@ -138,6 +154,50 @@ public class MainActivity extends Activity{
             doAll(keyword);
         }
     };
+
+    public void showNote(int id,String text){
+        CharSequence tickertext="这是一个显示在状态了的通知！";
+        CharSequence contexttitle="通知";
+        CharSequence contexttext=text;
+        long time=System.currentTimeMillis();
+
+        File file=new File("/sdcard/MusicDownload/url.txt");
+
+        //Intent notificationintent=new Intent(context,MainActivity.class);
+        //notificationintent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        //PendingIntent对象指定了当用户单击扩展的Notification时应用程序如何跳转
+        Intent intent = new Intent(Intent.ACTION_VIEW, Uri.fromFile(file));
+        PendingIntent pendingIntent=PendingIntent.getActivity(context,0,intent,0);
+
+        Notification.Builder builder=new Notification.Builder(context);
+        //设置通知栏左边的大图标
+        //builder.setLargeIcon();
+        //设置通知栏右边的小图标
+        builder.setSmallIcon(R.drawable.ic_download);
+        //通知首次出现在通知栏，带上升动画效果的
+        builder.setTicker(tickertext);
+        //通知产生的时间，会在通知信息里显示
+        builder.setWhen(time);
+        //设置通知的内容
+        builder.setContentText(contexttext);
+        //设置通知的标题
+        builder.setContentTitle(contexttitle);
+        //设置通知的优先级
+        //builder.setPriority(Notification.PRIORITY_MAX);
+        //设置这个标志当用户单击面板就可以让通知自动取消
+        builder.setAutoCancel(true);
+        //设置它为一个正在进行的通知。（通常用来表示一个后台任务，用户积极参与或以某种方式正在等待）
+        //builder.setOngoing(true);
+        //向通知添加声音、闪灯和震动效果的最简单、最一致的方式是使用当前的用户默认设置，使用defaults属性
+        //builder.setDefaults(Notification.DEFAULT_VIBRATE|Notification.DEFAULT_SOUND);
+        builder.setContentIntent(pendingIntent);
+        Notification notification=builder.build();
+        notification.defaults=notification.DEFAULT_SOUND;
+        //发起通知
+        notificationManager.notify(id,notification);
+        //取消显示通知
+        //mNotificationManager.cancel(1);
+    }
 
     public void doAll(String key){
         JSONArray list=searchMusicInfo(key);
@@ -239,7 +299,7 @@ public class MainActivity extends Activity{
         ClipData cp;
         cp=ClipData.newPlainText("text",str);
         cm.setPrimaryClip(cp);
-        Toast.makeText(MainActivity.this,"已将第一个结果复制到剪切板",Toast.LENGTH_SHORT).show();
+        showToast("已将第一个结果复制到剪切板",Toast.LENGTH_SHORT);
     }
 
     public boolean isInstalled(Context context,String name){
@@ -396,5 +456,11 @@ public class MainActivity extends Activity{
         String res = new String(buffer);
         fis.close();
         return res;
+    }
+
+    public void showToast(String str,int duration) {
+        Toast toast = Toast.makeText(this, str, duration);
+        toast.setGravity(Gravity.CENTER_VERTICAL, 0, 200);
+        toast.show();
     }
 }
