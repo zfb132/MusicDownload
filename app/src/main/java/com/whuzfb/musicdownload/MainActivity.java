@@ -62,6 +62,7 @@ public class MainActivity extends Activity{
     public static String singer="";
 
     public static String cliptext="";
+    public static boolean flag=true;
 
     public final static String IMEI_1="864855026227282";
     public final static String IMEI_2="867050025665727";
@@ -121,8 +122,6 @@ public class MainActivity extends Activity{
                     }else {
                         tv_show.setText("");
                         new Thread(networkTask).start();
-                        textToClipBoard(cliptext);
-                        showNote(1,"url已保存，点击打开");
                         //showToast("文件保存到/sdcard/MusicDownload/url.txt",Toast.LENGTH_LONG);
                     }
                 }else{
@@ -143,7 +142,15 @@ public class MainActivity extends Activity{
             super.handleMessage(msg);
             Bundle data = msg.getData();
             String val = data.getString("value");
-            tv_show.setText(tv_show.getText().toString()+val);
+            if(val.equals("ERROR")){
+                tv_show.setText("未搜索到任何相关内容！");
+            }else {
+                tv_show.setText(tv_show.getText().toString()+val);
+                if(data.getInt("times")==(data.getInt("total"))){
+                    textToClipBoard(cliptext);
+                    showNote(1,"url已保存，点击打开");
+                }
+            }
         }
     };
 
@@ -201,6 +208,15 @@ public class MainActivity extends Activity{
 
     public void doAll(String key){
         JSONArray list=searchMusicInfo(key);
+        //未搜索到的情况下list的内容为[]
+        if(list.toString().equals("[]")){
+            flag=false;
+            Message msg = new Message();
+            Bundle data = new Bundle();
+            data.putString("value", "ERROR");
+            msg.setData(data);
+            handler.sendMessage(msg);
+        }
         for (int i=0;i<list.length();i++){
             JSONObject ma=null;
             JSONObject mb=null;
@@ -236,6 +252,7 @@ public class MainActivity extends Activity{
                 e.printStackTrace();
             }
 
+            Log.d("guid","wcdgvui");
             guid=getGuid();
 
             vkey=getVkey(media_mid,mid);
@@ -247,12 +264,17 @@ public class MainActivity extends Activity{
             Bundle data = new Bundle();
             String temp=i+"\nkeyword="+key+"\nmid="+mid+"\nsinger="+singer+"\nguid="+guid+"\nvkey="+vkey+"\nurl_download="+url_download+"\n\n";
             if(i==0){
+                Log.d("i===0","wchcgiuhhrbjjrbhj");
                 cliptext=url_download;
                 writeData("/sdcard/MusicDownload/url.txt","关键词："+keyword+"\t\t歌手："+singer+"\n下载网址：\n"+url_download+"\n\n",false);
             }else {
                 writeData("/sdcard/MusicDownload/url.txt","关键词："+keyword+"\t\t歌手："+singer+"\n下载网址：\n"+url_download+"\n\n",true);
             }
+
+            data.putInt("times",i);
+            data.putInt("total",list.length()-1);
             data.putString("value", temp);
+
             msg.setData(data);
             handler.sendMessage(msg);
         }
