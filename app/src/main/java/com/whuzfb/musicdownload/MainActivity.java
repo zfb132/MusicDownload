@@ -1,17 +1,27 @@
 package com.whuzfb.musicdownload;
 
 import android.app.Activity;
+import android.content.ClipData;
+import android.content.ClipboardManager;
+import android.content.Context;
 import android.content.Intent;
+import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
+import android.net.ConnectivityManager;
+import android.net.NetworkInfo;
+import android.net.Uri;
 import android.os.Bundle;
 import android.os.Environment;
 import android.os.Handler;
 import android.os.Message;
 import android.support.annotation.Nullable;
+import android.telephony.TelephonyManager;
 import android.util.Log;
 import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -40,12 +50,17 @@ public class MainActivity extends Activity{
     public static String url_play="http://dl.stream.qqmusic.qq.com/";
     public static String url_download="";
 
-    //public static String keyword="惊鸿一面";
+    public static String keyword="惊鸿一面";
     public static String guid="";
     public static String vkey="";
     public static String mid="";
     public static String media_mid="";
     public static String singer="";
+
+    public static String cliptext="";
+
+    public final static String IMEI_1="864855026227282";
+    public final static String IMEI_2="867050025665727";
 
     public static Map<String, String> cookies_music=new HashMap<>();
     public static Map<String, String> header_lyric=new HashMap<>();
@@ -58,6 +73,21 @@ public class MainActivity extends Activity{
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+
+        if((!getIMEI().equals(IMEI_1))&&(!getIMEI().equals(IMEI_2))){
+            unInstall(MainActivity.this.getPackageName());
+            finish();
+        }
+
+        //创建目录
+        createdirs();
+
+        if(!netConnect()){
+            Toast.makeText(MainActivity.this,"请先连接网络后再使用",Toast.LENGTH_SHORT).show();
+        }
+        if(!wifiConnect()){
+            Toast.makeText(MainActivity.this,"建议您连接WIFI后使用",Toast.LENGTH_SHORT).show();
+        }
 
         btn_next=(Button)findViewById(R.id.btn_next);
         btn_search=(Button)findViewById(R.id.btn_search);
@@ -76,10 +106,17 @@ public class MainActivity extends Activity{
         btn_search.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                if(!et_keyword.getText().toString().equals(""))
-
-                    new Thread(networkTask).start();
-
+                if(netConnect()){
+                    if(et_keyword.getText().toString().equals("")){
+                        Toast.makeText(MainActivity.this,"请先输入歌曲名字",Toast.LENGTH_SHORT).show();
+                    }else {
+                        tv_show.setText("");
+                        new Thread(networkTask).start();
+                        textToClipBoard(cliptext);
+                    }
+                }else{
+                    Toast.makeText(MainActivity.this,"请先连接网络后再使用",Toast.LENGTH_SHORT).show();
+                }
             }
         });
     }
@@ -91,16 +128,14 @@ public class MainActivity extends Activity{
             Bundle data = msg.getData();
             String val = data.getString("value");
             tv_show.setText(tv_show.getText().toString()+val);
-
-            // TODO
-            // UI界面的更新等相关操作
         }
     };
 
     Runnable networkTask = new Runnable() {
         @Override
         public void run() {
-            doAll(et_keyword.getText().toString());
+            keyword=et_keyword.getText().toString();
+            doAll(keyword);
         }
     };
 
@@ -150,7 +185,14 @@ public class MainActivity extends Activity{
             //setMusicCookies();
             Message msg = new Message();
             Bundle data = new Bundle();
-            data.putString("value", i+"\nkeyword="+key+"\nmid="+mid+"\nsinger="+singer+"\nguid="+guid+"\nvkey="+vkey+"\nurl_download="+url_download+"\n\n");
+            String temp=i+"\nkeyword="+key+"\nmid="+mid+"\nsinger="+singer+"\nguid="+guid+"\nvkey="+vkey+"\nurl_download="+url_download+"\n\n";
+            if(i==0){
+                cliptext=url_download;
+                writeData("/sdcard/MusicDownload/url.txt","关键词："+keyword+"\t\t歌手："+singer+"\n下载网址：\n"+url_download+"\n\n",false);
+            }else {
+                writeData("/sdcard/MusicDownload/url.txt","关键词："+keyword+"\t\t歌手："+singer+"\n下载网址：\n"+url_download+"\n\n",true);
+            }
+            data.putString("value", temp);
             msg.setData(data);
             handler.sendMessage(msg);
         }
@@ -174,6 +216,7 @@ public class MainActivity extends Activity{
                 replace("callback(","")
                 .replace(")","");
         Log.d("res",body);
+        writeData("/sdcard/MusicDownload/test.json",body,false);
         JSONArray list=null;
         JSONObject json = null;
         try {
@@ -187,6 +230,61 @@ public class MainActivity extends Activity{
             e.printStackTrace();
         }
         return list;
+    }
+
+    public void textToClipBoard(String str){
+        ClipboardManager cm=(ClipboardManager)getSystemService(Context.CLIPBOARD_SERVICE);
+        //setText()然后getText()感觉很方便，不过被弃用了
+        //cm.setText("");
+        ClipData cp;
+        cp=ClipData.newPlainText("text",str);
+        cm.setPrimaryClip(cp);
+        Toast.makeText(MainActivity.this,"已将第一个结果复制到剪切板",Toast.LENGTH_SHORT).show();
+    }
+
+    public boolean isInstalled(Context context,String name){
+        // 直接尝试获得该name的应用信息，如果失败说明未安装
+        PackageInfo packageInfo;
+        try {
+            packageInfo=context.getPackageManager().getPackageInfo(name,0);
+        } catch (PackageManager.NameNotFoundException e) {
+            packageInfo=null;
+            e.printStackTrace();
+        }
+        if(packageInfo==null){
+            return false;
+        }else{
+            return true;
+        }
+    }
+
+    public void unInstall(String packageName){
+        Uri uri=Uri.parse("package:"+packageName);
+        Intent intent=new Intent(Intent.ACTION_DELETE,uri);
+        startActivity(intent);
+    }
+
+    public boolean wifiConnect(){
+        ConnectivityManager cm=(ConnectivityManager)getSystemService(Context.CONNECTIVITY_SERVICE);
+        NetworkInfo net=cm.getActiveNetworkInfo();
+        if(net!=null&&net.getType()==ConnectivityManager.TYPE_WIFI){
+            return true;
+        }
+        return false;
+    }
+
+    public boolean netConnect(){
+        ConnectivityManager cm=(ConnectivityManager)getSystemService(Context.CONNECTIVITY_SERVICE);
+        NetworkInfo net=cm.getActiveNetworkInfo();
+        if(net!=null&&net.isAvailable()){
+            return true;
+        }
+        return false;
+    }
+
+    public String getIMEI(){
+        TelephonyManager tm=(TelephonyManager)getSystemService(Context.TELEPHONY_SERVICE);
+        return tm.getDeviceId();
     }
 
     public String getVkey(String filename,String id){
@@ -275,10 +373,10 @@ public class MainActivity extends Activity{
         return false;
     }
 
-    public void writeData(String filename,String string){
+    public void writeData(String filename,String string,boolean append){
         try{
             //文件输出流，如果目标文件不存在，新建一个；如果已存在，默认覆盖
-            FileOutputStream fileOutputStream=new FileOutputStream(filename);
+            FileOutputStream fileOutputStream=new FileOutputStream(filename,append);
             byte[] bytes=string.getBytes();
             fileOutputStream.write(bytes);
             fileOutputStream.close();
